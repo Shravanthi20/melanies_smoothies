@@ -2,7 +2,8 @@ import streamlit as st
 from snowflake.snowpark.functions import col
 
 st.title("Customize Your Smoothie! :cup_with_straw:")
-cnx= st.connection("snowflake")
+
+cnx = st.connection("snowflake")
 session = cnx.session()
 
 my_dataframe = session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS").select(
@@ -30,11 +31,18 @@ if ingredients_list:
 
     st.write(ingredients_string)
 
-    my_insert_stmt = """INSERT INTO smoothies.public.orders(ingredients, name_on_order)
-                        VALUES ('""" + ingredients_string + """', '""" + customer_name + """')"""
+    my_insert_stmt = """
+        INSERT INTO SMOOTHIES.PUBLIC.ORDERS
+        (INGREDIENTS, NAME_ON_ORDER)
+        VALUES (?, ?)
+    """
 
     submit = st.button("Submit Order")
 
     if submit:
-        session.sql(my_insert_stmt).collect()
+        session.sql(
+            my_insert_stmt,
+            params=[ingredients_string, customer_name]
+        ).collect()
+
         st.success("Your Smoothie is ordered!", icon="✅")
