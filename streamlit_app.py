@@ -2,17 +2,16 @@ import streamlit as st
 from snowflake.snowpark.functions import col
 
 # Page title
-st.title("Customize Your Smoothie! :cup_with_straw:")
+st.title("Customize Your Smoothie! 🥤")
 
 # Connect to Snowflake
-cnx = st.connection("snowflake")
-session = cnx.session()
+conn = st.connection("snowflake")
+session = conn.session()
 
 # Get available fruits from Snowflake
-my_dataframe = session.table(
-    "SMOOTHIES.PUBLIC.FRUIT_OPTIONS"
-).select(
-    col("FRUIT_NAME")
+my_dataframe = (
+    session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS")
+    .select(col("FRUIT_NAME"))
 )
 
 fruit_list = my_dataframe.to_pandas()["FRUIT_NAME"].tolist()
@@ -33,29 +32,31 @@ ingredients_list = st.multiselect(
 # Process selected ingredients
 if ingredients_list:
 
-    # Convert list into a comma-separated string
     ingredients_string = ", ".join(ingredients_list)
 
     st.write("Your ingredients:", ingredients_string)
 
     # Submit button
-    submit = st.button("Submit Order")
+    if st.button("Submit Order"):
 
-    if submit:
+        # Check name
+        if not customer_name:
+            st.warning("Please enter your name before submitting the order.")
+        else:
 
-        # Insert order into Snowflake
-        my_insert_stmt = """
-            INSERT INTO SMOOTHIES.PUBLIC.ORDERS
-            (INGREDIENTS, NAME_ON_ORDER)
-            VALUES (?, ?)
-        """
+            # Insert order into Snowflake
+            my_insert_stmt = """
+                INSERT INTO SMOOTHIES.PUBLIC.ORDERS
+                (INGREDIENTS, NAME_ON_ORDER)
+                VALUES (?, ?)
+            """
 
-        session.sql(
-            my_insert_stmt,
-            params=[ingredients_string, customer_name]
-        ).collect()
+            session.sql(
+                my_insert_stmt,
+                params=[ingredients_string, customer_name]
+            ).collect()
 
-        st.success(
-            "Your Smoothie is ordered!",
-            icon="✅"
-        )
+            st.success(
+                "Your Smoothie is ordered!",
+                icon="✅"
+            )
