@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import pandas as pd
 from snowflake.snowpark.functions import col
 
 # Page title
@@ -9,7 +10,7 @@ st.title("Customize Your Smoothie! 🥤")
 conn = st.connection("snowflake")
 session = conn.session()
 
-# Get available fruits and API search values from Snowflake
+# Get fruit name and SEARCH_ON from Snowflake
 my_dataframe = (
     session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS")
     .select(
@@ -18,30 +19,28 @@ my_dataframe = (
     )
 )
 
-# Convert to pandas dataframe
-fruit_df = my_dataframe.to_pandas()
+# Convert Snowpark DataFrame to Pandas DataFrame
+pd_df = my_dataframe.to_pandas()
 
-# Fruit names shown to the user
-fruit_list = fruit_df["FRUIT_NAME"].tolist()
-
-# Create mapping between GUI name and API search name
-fruit_search_map = dict(
-    zip(
-        fruit_df["FRUIT_NAME"],
-        fruit_df["SEARCH_ON"]
-    )
+# Display dataframe for checking
+st.dataframe(
+    pd_df,
+    use_container_width=True
 )
 
 # Customer name
 customer_name = st.text_input("Name for your smoothie:")
 
 if customer_name:
-    st.write("Your name on the smoothie will be:", customer_name)
+    st.write(
+        "The name on your Smoothie will be:",
+        customer_name
+    )
 
 # Select ingredients
 ingredients_list = st.multiselect(
     "Choose up to 5 ingredients:",
-    fruit_list,
+    pd_df["FRUIT_NAME"].tolist(),
     max_selections=5
 )
 
@@ -54,31 +53,45 @@ if ingredients_list:
 
         ingredients_string += fruit_chosen + ", "
 
-        # Display nutrition information heading
+        # Find the API search value
+        search_on = pd_df.loc[
+            pd_df["FRUIT_NAME"] == fruit_chosen,
+            "SEARCH_ON"
+        ].iloc[0]
+
+        # Display the search value
+        st.write(
+            "The search value for ",
+            fruit_chosen,
+            " is ",
+            search_on,
+            "."
+        )
+
+        # Nutrition information
         st.subheader(
             fruit_chosen + " Nutrition Information"
         )
-
-        # Get the API search value from SEARCH_ON
-        search_on = fruit_search_map[fruit_chosen]
 
         # Call SmoothieFroot API
         smoothiefroot_response = requests.get(
             "https://my.smoothiefroot.com/api/fruit/" + search_on
         )
 
-        # Display API response as dataframe
+        # Display API data
         sf_df = st.dataframe(
             data=smoothiefroot_response.json(),
             use_container_width=True
         )
 
-    st.write("Your ingredients:", ingredients_string)
+    st.write(
+        "Your ingredients:",
+        ingredients_string
+    )
 
-    # Submit button
+    # Submit order
     if st.button("Submit Order"):
 
-        # Check name
         if not customer_name:
             st.warning(
                 "Please enter your name before submitting the order."
@@ -86,7 +99,6 @@ if ingredients_list:
 
         else:
 
-            # Insert order into Snowflake
             my_insert_stmt = """
                 INSERT INTO SMOOTHIES.PUBLIC.ORDERS
                 (INGREDIENTS, NAME_ON_ORDER)
@@ -95,7 +107,10 @@ if ingredients_list:
 
             session.sql(
                 my_insert_stmt,
-                params=[ingredients_string, customer_name]
+                params=[
+                    ingredients_string,
+                    customer_name
+                ]
             ).collect()
 
             st.success(
