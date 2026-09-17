@@ -1,119 +1,52 @@
-import streamlit as st
-import requests
+# Import python packages
 import pandas as pd
+import requests
+import streamlit as st
 from snowflake.snowpark.functions import col
 
-# Page title
-st.title("Customize Your Smoothie! 🥤")
+# Write directly to the app
+st.title(":cup_with_straw: Customize Your Smoothie! :cup_with_straw:")
+st.write("Choose the fruits you want in your custom Smoothie!")
 
-# Connect to Snowflake
-conn = st.connection("snowflake")
-session = conn.session()
+# Text input for customer name
+name_on_order = st.text_input('Name on Smoothie:')
+st.write('The name on your Smoothie will be:', name_on_order)
 
-# Get fruit names and API search values from Snowflake
-my_dataframe = (
-    session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS")
-    .select(
-        col("FRUIT_NAME"),
-        col("SEARCH_ON")
-    )
-)
+cnx = st.connection("snowflake")
+session = cnx.session()
 
-# Convert Snowpark DataFrame to Pandas DataFrame
+# Fetch available fruit options including the SEARCH_ON column from Snowflake
+my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON'))
+
+# Convert the Snowpark Dataframe to a Pandas Dataframe so we can use the LOC function
 pd_df = my_dataframe.to_pandas()
 
-# Customer name
-customer_name = st.text_input("Name for your smoothie:")
-
-if customer_name:
-    st.write(
-        "The name on your Smoothie will be:",
-        customer_name
-    )
-
-# Select ingredients
+# Multiselect widget with a max limit of 5 fruits
 ingredients_list = st.multiselect(
-    "Choose up to 5 ingredients:",
-    pd_df["FRUIT_NAME"].tolist(),
+    'Choose up to 5 ingredients:',
+    my_dataframe,
     max_selections=5
 )
 
-# Process selected ingredients
 if ingredients_list:
-
-    # Initialize ingredient string
     ingredients_string = ''
 
-    # Process each selected fruit
     for fruit_chosen in ingredients_list:
+        ingredients_string += fruit_chosen + ' '
+        
+        search_on = pd_df.loc[pd_df['FRUIT_NAME'] == fruit_chosen, 'SEARCH_ON'].iloc[0]
+        # st.write('The search value for ', fruit_chosen, ' is ', search_on, '.')
 
-        # Add fruit name to ingredient string
-        ingredients_string += fruit_chosen + ', '
+        st.subheader(fruit_chosen + ' Nutrition Information')
+        smoothiefroot_response = requests.get(f"https://my.smoothiefroot.com/api/fruit/{search_on}")
+        sf_df = st.dataframe(data=smoothiefroot_response.json(), use_container_width=True)
 
-        # Find the API search value from SEARCH_ON
-        search_on = pd_df.loc[
-            pd_df["FRUIT_NAME"] == fruit_chosen,
-            "SEARCH_ON"
-        ].iloc[0]
+    # Construct insert SQL statement
+    my_insert_stmt = """ insert into smoothies.public.orders(ingredients, name_on_order)
+            values ('""" + ingredients_string + """', '""" + name_on_order + """')"""
 
-        # Display search value
-        st.write(
-            "The search value for ",
-            fruit_chosen,
-            " is ",
-            search_on,
-            "."
-        )
+    time_to_insert = st.button('Submit Order')
 
-        # Display nutrition heading
-        st.subheader(
-            fruit_chosen + " Nutrition Information"
-        )
-
-        # Call SmoothieFroot API
-        smoothiefroot_response = requests.get(
-            f"https://my.smoothiefroot.com/api/fruit/{search_on}"
-        )
-
-        # Display API response
-        sf_df = st.dataframe(
-            data=smoothiefroot_response.json(),
-            use_container_width=True
-        )
-
-    # Display selected ingredients
-    st.write(
-        "Your ingredients:",
-        ingredients_string
-    )
-
-    # Submit order
-    if st.button("Submit Order"):
-
-        # Make sure customer name is entered
-        if not customer_name:
-            st.warning(
-                "Please enter your name before submitting the order."
-            )
-
-        else:
-
-            # Insert order into Snowflake
-            my_insert_stmt = """
-                INSERT INTO SMOOTHIES.PUBLIC.ORDERS
-                (INGREDIENTS, NAME_ON_ORDER)
-                VALUES (?, ?)
-            """
-
-            session.sql(
-                my_insert_stmt,
-                params=[
-                    ingredients_string,
-                    customer_name
-                ]
-            ).collect()
-
-            st.success(
-                "Your Smoothie is ordered!",
-                icon="✅"
-            )
+    if time_to_insert:
+        session.sql(my_insert_stmt).collect()
+        st.success('Your Smoothie is ordered, ' + name_on_order + '!', icon="✅")
