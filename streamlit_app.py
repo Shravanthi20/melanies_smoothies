@@ -9,19 +9,34 @@ st.title("Customize Your Smoothie! 🥤")
 conn = st.connection("snowflake")
 session = conn.session()
 
-# Get available fruits from Snowflake
+# Get available fruits and API search values from Snowflake
 my_dataframe = (
     session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS")
-    .select(col("FRUIT_NAME"))
+    .select(
+        col("FRUIT_NAME"),
+        col("SEARCH_ON")
+    )
 )
 
-fruit_list = my_dataframe.to_pandas()["FRUIT_NAME"].tolist()
+# Convert to pandas dataframe
+fruit_df = my_dataframe.to_pandas()
+
+# Fruit names shown to the user
+fruit_list = fruit_df["FRUIT_NAME"].tolist()
+
+# Create mapping between GUI name and API search name
+fruit_search_map = dict(
+    zip(
+        fruit_df["FRUIT_NAME"],
+        fruit_df["SEARCH_ON"]
+    )
+)
 
 # Customer name
 customer_name = st.text_input("Name for your smoothie:")
 
 if customer_name:
-    st.write("Name of your smoothie is:", customer_name)
+    st.write("Your name on the smoothie will be:", customer_name)
 
 # Select ingredients
 ingredients_list = st.multiselect(
@@ -33,15 +48,41 @@ ingredients_list = st.multiselect(
 # Process selected ingredients
 if ingredients_list:
 
-    ingredients_string = ", ".join(ingredients_list)
+    ingredients_string = ""
+
+    for fruit_chosen in ingredients_list:
+
+        ingredients_string += fruit_chosen + ", "
+
+        # Display nutrition information heading
+        st.subheader(
+            fruit_chosen + " Nutrition Information"
+        )
+
+        # Get the API search value from SEARCH_ON
+        search_on = fruit_search_map[fruit_chosen]
+
+        # Call SmoothieFroot API
+        smoothiefroot_response = requests.get(
+            "https://my.smoothiefroot.com/api/fruit/" + search_on
+        )
+
+        # Display API response as dataframe
+        sf_df = st.dataframe(
+            data=smoothiefroot_response.json(),
+            use_container_width=True
+        )
 
     st.write("Your ingredients:", ingredients_string)
 
     # Submit button
     if st.button("Submit Order"):
 
+        # Check name
         if not customer_name:
-            st.warning("Please enter your name before submitting the order.")
+            st.warning(
+                "Please enter your name before submitting the order."
+            )
 
         else:
 
@@ -61,14 +102,3 @@ if ingredients_list:
                 "Your Smoothie is ordered!",
                 icon="✅"
             )
-
-smoothiefroot_response = requests.get(
-    "https://my.smoothiefroot.com/api/fruit/watermelon"
-)
-
-# st.text(smoothiefroot_response.json())
-
-sf_df = st.dataframe(
-    data=smoothiefroot_response.json(),
-    use_container_width=True
-)
