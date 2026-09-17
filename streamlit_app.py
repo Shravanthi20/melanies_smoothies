@@ -1,4 +1,5 @@
 import streamlit as st
+import requests
 from snowflake.snowpark.functions import col
 
 # Page title
@@ -39,9 +40,9 @@ if ingredients_list:
     # Submit button
     if st.button("Submit Order"):
 
-        # Check name
         if not customer_name:
             st.warning("Please enter your name before submitting the order.")
+
         else:
 
             # Insert order into Snowflake
@@ -60,3 +61,9 @@ if ingredients_list:
                 "Your Smoothie is ordered!",
                 icon="✅"
             )
+
+smoothiefroot_response = requests.get(
+    "https://my.smoothiefroot.com/api/fruit/watermelon"
+)
+
+st.text(smoothiefroot_response.json())
