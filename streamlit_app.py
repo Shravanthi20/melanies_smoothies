@@ -41,12 +41,11 @@ ingredients_list = st.multiselect(
 # Process selected ingredients
 if ingredients_list:
 
-    ingredients_string = ""
+    # Create comma-separated string WITHOUT trailing comma
+    ingredients_string = ", ".join(ingredients_list)
 
+    # Process each selected fruit
     for fruit_chosen in ingredients_list:
-
-        # Build ingredients string
-        ingredients_string += fruit_chosen + ", "
 
         # Find the API search value from SEARCH_ON
         search_on = pd_df.loc[
